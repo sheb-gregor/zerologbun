@@ -1,4 +1,4 @@
-package logrusbun
+package zerologbun
 
 import (
 	"bytes"
@@ -9,17 +9,17 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 	"github.com/uptrace/bun"
 )
 
 // QueryHookOptions logging options
 type QueryHookOptions struct {
 	LogSlow         time.Duration
-	Logger          logrus.FieldLogger
-	QueryLevel      logrus.Level
-	SlowLevel       logrus.Level
-	ErrorLevel      logrus.Level
+	Logger          zerolog.Logger
+	QueryLevel      zerolog.Level
+	SlowLevel       zerolog.Level
+	ErrorLevel      zerolog.Level
 	MessageTemplate string
 	ErrorTemplate   string
 }
@@ -31,7 +31,7 @@ type QueryHook struct {
 	messageTemplate *template.Template
 }
 
-// LogEntryVars variables made available t otemplate
+// LogEntryVars variables made available to template
 type LogEntryVars struct {
 	Timestamp time.Time
 	Query     string
@@ -70,9 +70,9 @@ func (h *QueryHook) BeforeQuery(ctx context.Context, event *bun.QueryEvent) cont
 	return ctx
 }
 
-// AfterQuery convert a bun QueryEvent into a logrus message
+// AfterQuery convert a bun QueryEvent into a zerolog message
 func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
-	var level logrus.Level
+	var level zerolog.Level
 	var isError bool
 	var msg bytes.Buffer
 
@@ -97,7 +97,7 @@ func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
 
 	args := &LogEntryVars{
 		Timestamp: now,
-		Query:     string(event.Query),
+		Query:     event.Query,
 		Operation: eventOperation(event),
 		Duration:  dur,
 		Error:     event.Err,
@@ -114,20 +114,20 @@ func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
 	}
 
 	switch level {
-	case logrus.DebugLevel:
-		h.opts.Logger.Debug(msg.String())
-	case logrus.InfoLevel:
-		h.opts.Logger.Info(msg.String())
-	case logrus.WarnLevel:
-		h.opts.Logger.Warn(msg.String())
-	case logrus.ErrorLevel:
-		h.opts.Logger.Error(msg.String())
-	case logrus.FatalLevel:
-		h.opts.Logger.Fatal(msg.String())
-	case logrus.PanicLevel:
-		h.opts.Logger.Panic(msg.String())
+	case zerolog.DebugLevel:
+		h.opts.Logger.Debug().Msg(msg.String())
+	case zerolog.InfoLevel:
+		h.opts.Logger.Info().Msg(msg.String())
+	case zerolog.WarnLevel:
+		h.opts.Logger.Warn().Msg(msg.String())
+	case zerolog.ErrorLevel:
+		h.opts.Logger.Error().Msg(msg.String())
+	case zerolog.FatalLevel:
+		h.opts.Logger.Fatal().Msg(msg.String())
+	case zerolog.PanicLevel:
+		h.opts.Logger.Panic().Msg(msg.String())
 	default:
-		panic(fmt.Errorf("Unsupported level: %v", level))
+		panic(fmt.Errorf("unsupported level: %v", level))
 	}
 
 }
@@ -159,5 +159,5 @@ func queryOperation(name string) string {
 	if len(name) > 16 {
 		name = name[:16]
 	}
-	return string(name)
+	return name
 }
