@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 	"text/template"
 	"time"
@@ -45,16 +44,18 @@ func NewQueryHook(opts QueryHookOptions) *QueryHook {
 	h := new(QueryHook)
 
 	if opts.ErrorTemplate == "" {
-		opts.ErrorTemplate = "{{.Operation}}[{{.Duration}}]: {{.Query}}: {{.Error}}"
+		opts.ErrorTemplate = "{{.Operation}}: {{.Query}}: {{.Error}}"
 	}
 	if opts.MessageTemplate == "" {
-		opts.MessageTemplate = "{{.Operation}}[{{.Duration}}]: {{.Query}}"
+		opts.MessageTemplate = "{{.Operation}}: {{.Query}}"
 	}
+
 	h.opts = opts
 	errorTemplate, err := template.New("ErrorTemplate").Parse(h.opts.ErrorTemplate)
 	if err != nil {
 		panic(err)
 	}
+
 	messageTemplate, err := template.New("MessageTemplate").Parse(h.opts.MessageTemplate)
 	if err != nil {
 		panic(err)
@@ -72,12 +73,13 @@ func (h *QueryHook) BeforeQuery(ctx context.Context, event *bun.QueryEvent) cont
 
 // AfterQuery convert a bun QueryEvent into a zerolog message
 func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
-	var level zerolog.Level
 	var isError bool
 	var msg bytes.Buffer
 
 	now := time.Now()
 	dur := now.Sub(event.StartTime)
+
+	level := zerolog.Disabled
 
 	switch event.Err {
 	case nil, sql.ErrNoRows:
@@ -91,7 +93,8 @@ func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
 		isError = true
 		level = h.opts.ErrorLevel
 	}
-	if level == 0 {
+
+	if level == zerolog.Disabled {
 		return
 	}
 
@@ -113,23 +116,9 @@ func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
 		}
 	}
 
-	switch level {
-	case zerolog.DebugLevel:
-		h.opts.Logger.Debug().Msg(msg.String())
-	case zerolog.InfoLevel:
-		h.opts.Logger.Info().Msg(msg.String())
-	case zerolog.WarnLevel:
-		h.opts.Logger.Warn().Msg(msg.String())
-	case zerolog.ErrorLevel:
-		h.opts.Logger.Error().Msg(msg.String())
-	case zerolog.FatalLevel:
-		h.opts.Logger.Fatal().Msg(msg.String())
-	case zerolog.PanicLevel:
-		h.opts.Logger.Panic().Msg(msg.String())
-	default:
-		panic(fmt.Errorf("unsupported level: %v", level))
-	}
-
+	h.opts.Logger.WithLevel(level).
+		Stringer("duration", args.Duration).
+		Msg(msg.String())
 }
 
 // taken from bun
